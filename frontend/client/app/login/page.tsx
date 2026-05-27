@@ -1,11 +1,13 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import styles from "./page.module.css";
 import { collectDeviceSpec, collectNetworkContext, collectSessionMetadata } from "./collectors";
 import { useBehavior } from "./useBehavior";
 
 export default function LoginPage() {
+  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
@@ -19,7 +21,6 @@ export default function LoginPage() {
     setErrorMsg("");
 
     try {
-      // Collect all signals at submit time
       const [device_spec, network_context] = await Promise.all([
         Promise.resolve(collectDeviceSpec()),
         collectNetworkContext(),
@@ -46,7 +47,18 @@ export default function LoginPage() {
         throw new Error(data?.detail ?? `HTTP ${res.status}`);
       }
 
+      const data = await res.json();
+
+      // Store auth token and user info
+      localStorage.setItem("access_token", data.access_token);
+      localStorage.setItem("user_id", data.user_id);
+      localStorage.setItem("user_email", data.email);
+      localStorage.setItem("user_name", data.full_name);
+
       setStatus("success");
+
+      // Redirect after a brief success flash
+      setTimeout(() => router.push("/dashboard"), 1000);
     } catch (err: unknown) {
       setStatus("error");
       setErrorMsg(err instanceof Error ? err.message : "Login failed. Please try again.");

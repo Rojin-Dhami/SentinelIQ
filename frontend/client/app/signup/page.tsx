@@ -1,11 +1,13 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import styles from "./page.module.css";
 import { collectDeviceSpec, collectNetworkContext, collectSessionMetadata } from "../login/collectors";
 import { useBehavior } from "../login/useBehavior";
 
 export default function SignupPage() {
+  const router = useRouter();
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -60,7 +62,18 @@ export default function SignupPage() {
         throw new Error(data?.detail ?? `HTTP ${res.status}`);
       }
 
+      const data = await res.json();
+
+      // Store auth token and user info
+      localStorage.setItem("access_token", data.access_token);
+      localStorage.setItem("user_id", data.user_id);
+      localStorage.setItem("user_email", data.email);
+      localStorage.setItem("user_name", data.full_name);
+
       setStatus("success");
+
+      // Redirect after brief success flash
+      setTimeout(() => router.push("/dashboard"), 1200);
     } catch (err: unknown) {
       setStatus("error");
       setErrorMsg(err instanceof Error ? err.message : "Signup failed. Please try again.");
@@ -84,7 +97,6 @@ export default function SignupPage() {
         <div className={styles.card}>
           <div className={styles.cardHeader}>
             <div className={styles.iconWrap}>
-              {/* User-plus icon */}
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" width="28" height="28">
                 <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
                 <circle cx="9" cy="7" r="4" />
@@ -180,7 +192,7 @@ export default function SignupPage() {
             {/* Success banner */}
             {status === "success" && (
               <div className={styles.successBanner} role="status">
-                ✓ Account created — welcome aboard!
+                ✓ Account created — redirecting…
               </div>
             )}
 
