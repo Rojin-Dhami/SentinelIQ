@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     
     DEBUG: bool = True
     DATABASE_URL: str
+    
     SECRET_KEY: str = "unsafe-KOACG1Y8u-Y_akeSco4nrSshIPAf3Xxhs9ZKU"
     
     ALGORITHM: str ="HS256"
@@ -18,6 +19,8 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_MINUTES: int = 60*24
     
     ALLOW_ORIGINS: list[str] = ["*"]
+
+
 
     REDIS_HOST: str
     REDIS_PORT: int

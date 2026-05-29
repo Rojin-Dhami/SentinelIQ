@@ -35,9 +35,9 @@
 }
 
 .logoMark {
-  width: 44px;
-  height: 44px;
-  border-radius: 14px;
+  width: 52px;
+  height: 52px;
+  border-radius: 16px;
   background: #ffffff;
   display: grid;
   place-items: center;

@@ -143,12 +143,17 @@ async def auth_flow(
         ))
         db.commit()
  
-        # progressive delay — makes brute force painfully slow
+        # progressive delay — return wait time without server-side sleep
         delay = _progressive_delay(user.failed_login_count)
-        if delay:
-            await asyncio.sleep(delay)
- 
-        raise HTTPException(status_code=401, detail="Invalid credentials")
+
+        raise HTTPException(
+            status_code=401,
+            detail={
+                "message": "Invalid credentials",
+                "delay_seconds": delay,
+                "failed_count": user.failed_login_count,
+            },
+        )
 
     # ── 5. Correct password — run full signal pipeline ────────────────────────
     user.failed_login_count = 0  # reset on success

@@ -9,10 +9,10 @@ export default function Home() {
         <div className={styles.logoBlock}>
           <span className={styles.logoMark}>
             <Image
-              src="/icon.jpeg"
+              src="/image.png"
               alt="SentinelIQ Pay"
-              width={40}
-              height={40}
+              width={48}
+              height={48}
               priority
             />
           </span>
