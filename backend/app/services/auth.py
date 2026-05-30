@@ -60,6 +60,32 @@ def _device_label(device_spec) -> str:
     return ua[:80] if ua else "Unknown device"
 
 
+def _debug_payload(breakdown, device_res, ip, city, country) -> dict:
+    """DEBUG-mode payload returned in /login responses so tooling (the attack
+    simulator, integration tests) can see per-signal scores without scraping
+    server logs. Never enable in production."""
+    return {
+        "ip": ip,
+        "city": city,
+        "country": country,
+        "decision": breakdown.decision.value,
+        "final": round(breakdown.final, 3),
+        "rule_based": round(breakdown.rule_based, 3),
+        "signals": {
+            "velocity": round(breakdown.velocity, 3),
+            "geo": round(breakdown.geo, 3),
+            "device": round(breakdown.device, 3),
+            "behavioral": round(breakdown.behavioral, 3),
+        },
+        "device": {
+            "is_known": device_res.is_known_device,
+            "is_similar": device_res.is_similar_device,
+            "is_trusted": device_res.is_trusted_device,
+            "headless_score": round(device_res.headless_score, 3),
+        },
+    }
+
+
 async def _send_register_otp_bg(email: str, name: str, otp: str) -> None:
     try:
         await notifications.send_register_otp(email, name, otp)
@@ -222,7 +248,23 @@ async def login_flow(
         delay = _progressive_delay(user.failed_login_count)
         if delay:
             await asyncio.sleep(delay)
-        raise HTTPException(status_code=401, detail="Invalid credentials")
+        bad_detail: dict = {"code": "invalid_credentials", "message": "Invalid credentials"}
+        if settings.DEBUG:
+            # Re-read velocity so the response shows the post-record counts.
+            v = await check_velocity(user_id=user.id, ip=ip, redis=redis)
+            bad_detail["debug"] = {
+                "ip": ip,
+                "decision": "invalid_credentials",
+                "signals": {
+                    "velocity": round(max(v.user_risk, v.ip_risk, v.user_ip_risk), 3),
+                    "geo": 0.0, "device": 0.0, "behavioral": 0.0,
+                },
+                "velocity_counts": {
+                    "user": v.user_count, "ip": v.ip_count, "user_ip": v.user_ip_count,
+                },
+                "failed_login_count": user.failed_login_count,
+            }
+        raise HTTPException(status_code=401, detail=bad_detail)
 
     # ── Password OK — run the full pipeline ─────────────────────────────────
     user.failed_login_count = 0
@@ -253,7 +295,7 @@ async def login_flow(
         user.email, breakdown.decision.value, breakdown.final,
         {"v": breakdown.velocity, "g": breakdown.geo, "d": breakdown.device, "b": breakdown.behavioral},
     )
-
+    debug_payload = _debug_payload(breakdown, device_res, ip, city, country) if settings.DEBUG else None
     # ── BLOCK ──────────────────────────────────────────────────────────────
     if breakdown.decision is RiskDecision.BLOCK:
         event = LoginEvent(
@@ -281,6 +323,7 @@ async def login_flow(
         raise HTTPException(status_code=403, detail={
             "code": "blocked_high_risk",
             "message": "Sign-in blocked. Check your email to confirm it was you.",
+            **({"debug": debug_payload} if debug_payload else {}),
         })
 
     # ── STEP-UP MFA ────────────────────────────────────────────────────────
@@ -313,6 +356,7 @@ async def login_flow(
             "challenge_id": challenge_id,
             "expires_in": settings.OTP_TTL_SECONDS,
             "risk": breakdown.final,
+            **({"debug": debug_payload} if debug_payload else {}),
         }
 
     # ── ALLOW ──────────────────────────────────────────────────────────────
@@ -334,6 +378,7 @@ async def login_flow(
         "uuid": str(user.uuid),
         "email": user.email,
         "risk": breakdown.final,
+        **({"debug": debug_payload} if debug_payload else {}),
     }
 
 

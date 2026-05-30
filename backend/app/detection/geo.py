@@ -141,8 +141,6 @@ def _outside_home_cluster(current: GeoLocation, history: list[GeoLocation]) -> b
 async def check_geo(user_id: int, ip: str, redis: Redis, store: bool = False) -> GeoResult:
     """When `store=True`, persist this location to last+history (call only after
     a successful credential check, but before the risk decision)."""
-    if settings.DEBUG:
-        ip = ""
     current_loc = await _fetch_geo(ip)
 
     if current_loc is None:
