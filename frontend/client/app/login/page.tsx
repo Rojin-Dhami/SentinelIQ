@@ -34,6 +34,17 @@ export default function LoginPage() {
     "idle" | "loading" | "success" | "error"
   >("idle");
   const [errorMsg, setErrorMsg] = useState("");
+  const [failedAttempts, setFailedAttempts] = useState(0);
+  const [emailFallbackPending, setEmailFallbackPending] = useState(false);
+  const [lockState, setLockState] = useState<{
+    lockedUntil: number;
+    level: number;
+  } | null>(null);
+  const [blockedState, setBlockedState] = useState<{
+    message: string;
+    level: number;
+  } | null>(null);
+  const [now, setNow] = useState(() => Date.now());
 
   const [otp, setOtp] = useState("");
   const [rememberDevice, setRememberDevice] = useState(false);
@@ -51,6 +62,19 @@ export default function LoginPage() {
     }, 500);
     return () => window.clearInterval(timer);
   }, [showBehavior, snapshot]);
+
+  // 1-second tick for the lock countdown; auto-clears when expired.
+  useEffect(() => {
+    if (!lockState) return;
+    const id = window.setInterval(() => {
+      const t = Date.now();
+      setNow(t);
+      if (t >= lockState.lockedUntil) {
+        setLockState(null);
+      }
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [lockState]);
 
   const formatMetric = (value: number | null, digits = 1) => {
     if (value === null || Number.isNaN(value)) return "--";
@@ -85,16 +109,101 @@ export default function LoginPage() {
           expiresIn: result.expires_in,
         });
         setStatus("idle");
+        setFailedAttempts(0);
         return;
       }
 
       setStatus("success");
+      setFailedAttempts(0);
       setTimeout(() => router.push("/dashboard"), 600);
     } catch (err: unknown) {
+      setStatus("error");
+      if (err instanceof ApiError) {
+        const detail = err.detail as {
+          code?: string;
+          message?: string;
+          locked_until?: string | null;
+          seconds_remaining?: number;
+          lock_level?: number;
+        } | null;
+
+        if (err.status === 403 && detail && detail.code === "account_blocked") {
+          setBlockedState({
+            message:
+              detail.message ?? "Account permanently blocked. Contact support.",
+            level: detail.lock_level ?? 0,
+          });
+          setLockState(null);
+          setErrorMsg("");
+          return;
+        }
+
+        if (err.status === 401) {
+          setFailedAttempts((prev) => prev + 1);
+          if (detail && detail.code === "account_locked") {
+            const until = detail.locked_until
+              ? Date.parse(detail.locked_until)
+              : Date.now() + (detail.seconds_remaining ?? 0) * 1000;
+            setLockState({
+              lockedUntil: until,
+              level: detail.lock_level ?? 1,
+            });
+            setNow(Date.now());
+            setErrorMsg("");
+            return;
+          }
+        }
+      }
+      setErrorMsg(
+        err instanceof Error ? err.message : "Login failed. Please try again.",
+      );
+    }
+  };
+
+  const requestEmailVerification = async () => {
+    if (!email || !password) {
+      setErrorMsg("Enter your email and password first.");
+      setStatus("error");
+      return;
+    }
+    setEmailFallbackPending(true);
+    setStatus("loading");
+    setErrorMsg("");
+
+    try {
+      const [device_spec, network_context] = await Promise.all([
+        Promise.resolve(collectDeviceSpec()),
+        collectNetworkContext(),
+      ]);
+      const session_metadata = collectSessionMetadata();
+      const behavioral_signals = snapshot();
+
+      const result = await api.mfaRequest({
+        credentials: { email, password },
+        device_spec,
+        network_context,
+        behavioral_signals,
+        session_metadata,
+      });
+
+      setPhase({
+        kind: "mfa",
+        challengeId: result.challenge_id,
+        expiresIn: result.expires_in,
+      });
+      setStatus("idle");
+      setFailedAttempts(0);
+      setLockState(null);
+    } catch (err: unknown) {
+      // Generic 401 here can mean wrong creds OR unknown device — match the
+      // server's no-info-leak contract by surfacing the same copy as a normal
+      // failed login.
       setStatus("error");
       setErrorMsg(
         err instanceof Error ? err.message : "Login failed. Please try again.",
       );
+    } finally {
+      setEmailFallbackPending(false);
     }
   };
 
@@ -221,6 +330,75 @@ export default function LoginPage() {
                   />
                 </div>
 
+                {blockedState && (
+                  <div
+                    role="alert"
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "0.35rem",
+                      padding: "0.85rem 1rem",
+                      borderRadius: "0.6rem",
+                      background: "rgba(80, 10, 10, 0.1)",
+                      border: "1px solid rgba(80, 10, 10, 0.35)",
+                      color: "#4a0c0c",
+                      fontSize: "0.88rem",
+                      lineHeight: 1.4,
+                    }}
+                  >
+                    <strong style={{ fontSize: "0.92rem" }}>
+                      Account permanently blocked
+                    </strong>
+                    <span>{blockedState.message}</span>
+                  </div>
+                )}
+
+                {!blockedState &&
+                  lockState &&
+                  (() => {
+                    const secs = Math.max(
+                      0,
+                      Math.ceil((lockState.lockedUntil - now) / 1000),
+                    );
+                    const mm = Math.floor(secs / 60)
+                      .toString()
+                      .padStart(2, "0");
+                    const ss = (secs % 60).toString().padStart(2, "0");
+                    return (
+                      <div
+                        role="alert"
+                        style={{
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: "0.35rem",
+                          padding: "0.85rem 1rem",
+                          borderRadius: "0.6rem",
+                          background: "rgba(180, 35, 24, 0.08)",
+                          border: "1px solid rgba(180, 35, 24, 0.25)",
+                          color: "#7a1d12",
+                          fontSize: "0.88rem",
+                          lineHeight: 1.4,
+                        }}
+                      >
+                        <strong style={{ fontSize: "0.92rem" }}>
+                          Account temporarily locked
+                        </strong>
+                        <span>
+                          Too many failed attempts. Try again in{" "}
+                          <strong>
+                            {mm}:{ss}
+                          </strong>
+                          {lockState.level > 1 &&
+                            ` (lock level ${lockState.level})`}
+                          .
+                        </span>
+                        <span style={{ opacity: 0.85 }}>
+                          Or verify by email below to sign in now.
+                        </span>
+                      </div>
+                    );
+                  })()}
+
                 {errorMsg && (
                   <div className={styles.errorBanner} role="alert">
                     <svg
@@ -248,7 +426,12 @@ export default function LoginPage() {
                 <button
                   type="submit"
                   className={styles.submitBtn}
-                  disabled={status === "loading" || status === "success"}
+                  disabled={
+                    status === "loading" ||
+                    status === "success" ||
+                    blockedState !== null ||
+                    (lockState !== null && lockState.lockedUntil > now)
+                  }
                 >
                   {status === "loading" ? (
                     <span className={styles.spinner} aria-label="Signing in…" />
@@ -256,6 +439,32 @@ export default function LoginPage() {
                     "Sign in"
                   )}
                 </button>
+
+                {!blockedState &&
+                  (failedAttempts >= 2 || lockState !== null) &&
+                  status !== "success" && (
+                    <button
+                      type="button"
+                      onClick={requestEmailVerification}
+                      disabled={status === "loading" || emailFallbackPending}
+                      style={{
+                        background: "transparent",
+                        border: "1px solid rgba(11, 36, 22, 0.15)",
+                        borderRadius: "0.5rem",
+                        padding: "0.6rem 0.8rem",
+                        color: "rgba(11, 36, 22, 0.75)",
+                        cursor:
+                          status === "loading" || emailFallbackPending
+                            ? "not-allowed"
+                            : "pointer",
+                        fontSize: "0.85rem",
+                      }}
+                    >
+                      {emailFallbackPending
+                        ? "Sending code…"
+                        : "Verify by email instead"}
+                    </button>
+                  )}
               </form>
             ) : (
               <form className={styles.form} onSubmit={handleMfa} noValidate>

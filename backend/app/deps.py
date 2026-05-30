@@ -7,7 +7,7 @@ from redis.asyncio import Redis
 
 from app.db.session import SessionLocal
 from app.core.security import decode_token
-from app.db.models import User, Session as SessionModel
+from app.db.models import User, Session as SessionModel, UserRole
 from app.core.config import settings
 
 _redis_client: Redis | None = None
@@ -90,4 +90,10 @@ def get_current_user(
     user = db.execute(stmt).scalar_one_or_none()
     if not user or not user.is_active:
         raise HTTPException(status_code=401, detail="User not found or inactive")
+    return user
+
+
+def require_admin(user: User = Depends(get_current_user)) -> User:
+    if user.role != UserRole.admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
     return user

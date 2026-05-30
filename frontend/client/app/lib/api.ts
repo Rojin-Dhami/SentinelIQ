@@ -9,8 +9,7 @@ import type {
 } from "../login/collectors";
 import type { BehavioralSignals } from "../login/useBehavior";
 
-export const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? "/api";
+export const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "/api";
 
 /* ── Request payloads ────────────────────────────────────────────────────── */
 
@@ -39,6 +38,14 @@ export interface MfaVerifyRequest {
   challenge_id: string;
   otp: string;
   remember_device?: boolean;
+}
+
+export interface MfaRequestRequest {
+  credentials: { email: string; password: string };
+  device_spec: DeviceSpec;
+  network_context: NetworkContext;
+  behavioral_signals: BehavioralSignals;
+  session_metadata: SessionMetadata;
 }
 
 /* ── Response shapes ─────────────────────────────────────────────────────── */
@@ -145,6 +152,13 @@ export const api = {
       email: string;
       device_trusted: boolean;
     }>("/auth/mfa/verify", { method: "POST", body: JSON.stringify(body) }),
+
+  mfaRequest: (body: MfaRequestRequest) =>
+    request<{
+      status: "mfa_required";
+      challenge_id: string;
+      expires_in: number;
+    }>("/auth/mfa/request", { method: "POST", body: JSON.stringify(body) }),
 
   me: () => request<SessionUser>("/auth/me", { method: "GET" }),
 

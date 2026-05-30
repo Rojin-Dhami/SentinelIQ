@@ -5,7 +5,8 @@ from redis.asyncio import Redis
 from app.deps import get_db, get_redis, get_current_user
 from app.db.models import User
 from app.schemas.auth import (
-    LoginRequest, MfaVerifyRequest, RegisterRequest, RegisterVerifyRequest,
+    LoginRequest, MfaRequestRequest, MfaVerifyRequest,
+    RegisterRequest, RegisterVerifyRequest,
 )
 from app.services import auth as auth_svc
 
@@ -53,6 +54,16 @@ async def mfa_verify(
     redis: Redis = Depends(get_redis),
 ):
     return await auth_svc.mfa_verify_flow(request, response, body, db, redis)
+
+
+@router.post("/mfa/request")
+async def mfa_request(
+    request: Request,
+    body: MfaRequestRequest,
+    db: Session = Depends(get_db),
+    redis: Redis = Depends(get_redis),
+):
+    return await auth_svc.mfa_request_flow(request, body, db, redis)
 
 
 @router.get("/security/confirm")

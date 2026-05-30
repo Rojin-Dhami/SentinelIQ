@@ -8,6 +8,7 @@ from app.core.config import settings
 from app.core.logging import setup_logging
 from app.deps import get_redis_client, close_redis
 from app.api import auth
+from app.api import admin as admin_api
 
 setup_logging()
 
@@ -32,6 +33,7 @@ app.add_middleware(
 )
 
 app.include_router(auth.router, prefix="/api")
+app.include_router(admin_api.router, prefix="/api")
 
 @app.get("/", response_class=HTMLResponse)
 def home():

@@ -22,8 +22,22 @@ class RiskBreakdown:
     device: float
     behavioral: float
     rule_based: float
+    ml: float
     final: float
     decision: RiskDecision
+
+    def to_dict(self, reasons: list[str] | None = None) -> dict:
+        return {
+            "velocity": round(self.velocity, 4),
+            "geo": round(self.geo, 4),
+            "device": round(self.device, 4),
+            "behavioral": round(self.behavioral, 4),
+            "ml": round(self.ml, 4),
+            "rule_based": round(self.rule_based, 4),
+            "final": round(self.final, 4),
+            "decision": self.decision.value,
+            "reasons": reasons or [],
+        }
 
 
 def _clamp(value: float, lo: float = 0.0, hi: float = 1.0) -> float:
@@ -114,6 +128,47 @@ def build_breakdown(
         device=risks["device"],
         behavioral=risks["behavioral"],
         rule_based=round(rule_based, 4),
+        ml=round(_clamp(ml_risk or 0.0), 4),
         final=round(final, 4),
         decision=decide(final, device.is_trusted_device),
     )
+
+
+def derive_reasons(
+    breakdown: RiskBreakdown,
+    velocity: VelocityResult,
+    geo: GeoResult,
+    device: DeviceCheckResult,
+    behavioral: BehavioralCheckResult,
+) -> list[str]:
+    """Translate raw signals into human-readable tags for the admin dashboard.
+
+    Each tag is a stable enum-like string so the UI can render badges and the
+    dashboard can filter on them.
+    """
+    reasons: list[str] = []
+
+    if breakdown.velocity >= 0.5:
+        reasons.append("velocity_spike")
+    if breakdown.geo >= 0.5:
+        # geo.risk already encodes impossible_travel / new_country / tor proxies.
+        if getattr(geo, "is_impossible_travel", False):
+            reasons.append("impossible_travel")
+        elif getattr(geo, "is_new_country", False):
+            reasons.append("new_country")
+        else:
+            reasons.append("geo_anomaly")
+    if not device.is_known_device:
+        reasons.append("new_device")
+    elif device.is_similar_device:
+        reasons.append("similar_device")
+    if device.headless_score >= 0.5:
+        reasons.append("headless_browser")
+    if behavioral.bot_behavior_score >= 0.5:
+        reasons.append("bot_typing")
+    if behavioral.baseline_anomaly_score >= 0.5:
+        reasons.append("behavior_drift")
+    if breakdown.ml >= 0.6:
+        reasons.append("ml_anomaly")
+
+    return reasons

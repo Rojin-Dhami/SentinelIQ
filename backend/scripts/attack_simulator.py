@@ -215,11 +215,21 @@ def print_outcome(label: str, out: LoginOutcome) -> None:
         else "(no debug breakdown — is DEBUG=True?)"
     )
     final = None
+    ml_val = None
     if isinstance(out.body, dict):
         final = out.body.get("risk")
+        dbg_body = out.body.get("debug")
+        if isinstance(dbg_body, dict):
+            ml_val = dbg_body.get("ml")
+            if final is None:
+                final = dbg_body.get("final")
         if final is None and isinstance(out.body.get("detail"), dict):
-            final = out.body["detail"].get("debug", {}).get("final")
+            inner_dbg = out.body["detail"].get("debug", {})
+            final = inner_dbg.get("final")
+            if ml_val is None:
+                ml_val = inner_dbg.get("ml")
     final_str = f"{final:.3f}" if isinstance(final, (int, float)) else "—"
+    ml_str = f" ml={ml_val:.2f}" if isinstance(ml_val, (int, float)) else ""
 
     # Pull optional extras (only present in 401 debug payloads).
     extra = ""
@@ -241,7 +251,7 @@ def print_outcome(label: str, out: LoginOutcome) -> None:
 
     print(
         f"  [{out.status_code}] {label:<28} ip={out.spoofed_ip:<15} "
-        f"decision={out.decision:<20} final={final_str}  {sig_str}{extra}"
+        f"decision={out.decision:<20} final={final_str}  {sig_str}{ml_str}{extra}"
     )
 
 

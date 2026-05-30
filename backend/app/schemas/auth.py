@@ -86,3 +86,13 @@ class MfaVerifyRequest(BaseModel):
     challenge_id: str
     otp: str
     remember_device: bool = False
+
+
+class MfaRequestRequest(BaseModel):
+    """Used to start an MFA flow outside of the normal login decision path —
+    today only consumed by the unlock-during-temporal-lock UX."""
+    credentials: LoginCredentials
+    device_spec: DeviceSpec
+    network_context: NetworkContext
+    behavioral_signals: BehavioralSignals
+    session_metadata: SessionMetadata

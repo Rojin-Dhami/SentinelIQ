@@ -1,97 +1,239 @@
-import Link from "next/link";
-import styles from "./page.module.css";
+"use client";
 
-export default function AdminHome() {
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import AuthGate from "./components/AuthGate";
+import Nav from "./components/Nav";
+import StatCards from "./components/StatCards";
+import WindowSelector from "./components/WindowSelector";
+import Filters from "./components/Filters";
+import LiveFeed from "./components/LiveFeed";
+import EventDetailsPanel from "./components/EventDetailsPanel";
+import AttackSimulator from "./components/AttackSimulator";
+import { getStats, listEvents, me } from "./lib/api";
+import { C } from "./lib/theme";
+import type {
+  AdminEvent,
+  Decision,
+  Outcome,
+  StatsResponse,
+  Window,
+} from "./lib/types";
+
+const MAX_EVENTS = 200;
+const STATS_REFRESH_MS = 10_000;
+
+export default function Page() {
   return (
-    <div className={styles.page}>
-      {/* Navbar */}
-      <header className={styles.navbar}>
-        <div className={styles.logo}>Innovators Admin</div>
+    <AuthGate>
+      <Dashboard />
+    </AuthGate>
+  );
+}
 
-        <nav className={styles.navLinks}>
-          <a href="#">Dashboard</a>
-          <a href="#">Users</a>
-          <a href="#">Transactions</a>
-          <a href="#" className={styles.loginBtn}>
-            Admin Login
-          </a>
-        </nav>
-      </header>
+function Dashboard() {
+  const [adminEmail, setAdminEmail] = useState<string | null>(null);
+  const [window, setWindow] = useState<Window>("24h");
+  const [stats, setStats] = useState<StatsResponse | null>(null);
+  const [events, setEvents] = useState<AdminEvent[]>([]);
+  const [eventsLoading, setEventsLoading] = useState(true);
+  const [decision, setDecision] = useState<Decision | "">("");
+  const [outcome, setOutcome] = useState<Outcome | "">("");
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [connected, setConnected] = useState(false);
 
-      {/* Hero Section */}
-      <main className={styles.hero}>
-        {/* Left Side */}
-        <div className={styles.left}>
-          <span className={styles.badge}>Admin Control Panel</span>
+  const lastSeenIdRef = useRef<number>(0);
+  const esRef = useRef<EventSource | null>(null);
 
-          <h1>
-            MANAGE <span>EWALLET</span> SYSTEM
-          </h1>
+  useEffect(() => {
+    me()
+      .then((u) => setAdminEmail(u.email))
+      .catch(() => {});
+  }, []);
 
-          <p>
-            Monitor users, transactions, and platform activities with a secure
-            and modern admin dashboard.
-          </p>
+  useEffect(() => {
+    let cancelled = false;
+    const load = () =>
+      getStats(window)
+        .then((s) => {
+          if (!cancelled) setStats(s);
+        })
+        .catch(() => {});
+    load();
+    const t = setInterval(load, STATS_REFRESH_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(t);
+    };
+  }, [window]);
 
-          <div className={styles.actions}>
-            <Link href="/dashboard" className={styles.primaryBtn}>
-              Open Dashboard
-            </Link>
+  useEffect(() => {
+    let cancelled = false;
+    setEventsLoading(true);
+    listEvents({
+      limit: 80,
+      decision: decision || undefined,
+      outcome: outcome || undefined,
+    })
+      .then((r) => {
+        if (cancelled) return;
+        setEvents(r.items);
+        if (r.items.length > 0) {
+          lastSeenIdRef.current = Math.max(
+            lastSeenIdRef.current,
+            ...r.items.map((e) => e.id),
+          );
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setEventsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [decision, outcome]);
 
-            <button className={styles.secondaryBtn}>View Reports</button>
+  useEffect(() => {
+    const es = new EventSource("/api/admin/stream", { withCredentials: true });
+    esRef.current = es;
+
+    let consecutiveErrors = 0;
+
+    const onOpen = () => {
+      consecutiveErrors = 0;
+      setConnected(true);
+    };
+    es.addEventListener("hello", onOpen);
+    es.onopen = onOpen;
+    es.onerror = () => {
+      setConnected(false);
+      consecutiveErrors += 1;
+      // EventSource hides HTTP status; after several failed reconnects assume
+      // the cookie is bad (likely overwritten by a login on the client app)
+      // and verify session. me() will redirect to /login on 401/403.
+      if (consecutiveErrors >= 3) {
+        consecutiveErrors = 0;
+        me().catch(() => {});
+      }
+    };
+
+    es.addEventListener("login_event", (msg) => {
+      try {
+        const payload = JSON.parse((msg as MessageEvent).data) as AdminEvent;
+        lastSeenIdRef.current = Math.max(lastSeenIdRef.current, payload.id);
+        setEvents((prev) => {
+          if (prev.some((e) => e.id === payload.id)) return prev;
+          return [payload, ...prev].slice(0, MAX_EVENTS);
+        });
+      } catch {
+        /* ignore */
+      }
+    });
+
+    return () => {
+      es.close();
+      esRef.current = null;
+    };
+  }, []);
+
+  const visibleEvents = useMemo(() => {
+    return events.filter((e) => {
+      if (decision && e.decision !== decision) return false;
+      if (outcome && e.outcome !== outcome) return false;
+      return true;
+    });
+  }, [events, decision, outcome]);
+
+  const handleSelect = useCallback((ev: AdminEvent) => {
+    setSelectedId(ev.id);
+  }, []);
+
+  return (
+    <div
+      style={{ minHeight: "100vh", background: C.bgMain, color: C.textWhite }}
+    >
+      <Nav adminEmail={adminEmail} connected={connected} />
+
+      {selectedId != null && (
+        <EventDetailsPanel
+          eventId={selectedId}
+          onClose={() => setSelectedId(null)}
+        />
+      )}
+
+      <div style={{ padding: 24 }}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            marginBottom: 14,
+            flexWrap: "wrap",
+            gap: 12,
+          }}
+        >
+          <div
+            style={{
+              fontSize: 10,
+              fontFamily: "monospace",
+              color: C.textLabel,
+              textTransform: "uppercase",
+              letterSpacing: "0.18em",
+            }}
+          >
+            Aggregates · {window}
           </div>
-
-          {/* Stats */}
-          <div className={styles.stats}>
-            <div>
-              <h3>25k+</h3>
-              <span>Active Users</span>
-            </div>
-
-            <div>
-              <h3>12M+</h3>
-              <span>Transactions</span>
-            </div>
-
-            <div>
-              <h3>99.99%</h3>
-              <span>System Uptime</span>
-            </div>
-          </div>
+          <WindowSelector value={window} onChange={setWindow} />
         </div>
 
-        {/* Right Side */}
-        <div className={styles.right}>
-          <div className={styles.card}>
-            <div className={styles.cardTop}>
-              <span>System Overview</span>
-              <span>●</span>
-            </div>
+        <StatCards stats={stats} />
 
-            <div className={styles.balance}>
-              <p>Total Revenue</p>
-              <h2>Rs. 8,45,000</h2>
-            </div>
-
-            <div className={styles.transactions}>
-              <div className={styles.transaction}>
-                <span>New Users Today</span>
-                <span className={styles.green}>+ 320</span>
-              </div>
-
-              <div className={styles.transaction}>
-                <span>Pending Verifications</span>
-                <span>18</span>
-              </div>
-
-              <div className={styles.transaction}>
-                <span>Failed Transactions</span>
-                <span className={styles.red}>7</span>
-              </div>
-            </div>
+        <div style={{ marginBottom: 24 }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              marginBottom: 10,
+              flexWrap: "wrap",
+            }}
+          >
+            <span
+              style={{
+                fontSize: 10,
+                fontFamily: "monospace",
+                color: C.textLabel,
+                textTransform: "uppercase",
+                letterSpacing: "0.18em",
+              }}
+            >
+              Live Risk Feed
+            </span>
+            <div
+              style={{
+                flex: 1,
+                height: 1,
+                background: C.borderSub,
+                minWidth: 20,
+              }}
+            />
+            <Filters
+              decision={decision}
+              outcome={outcome}
+              onDecision={setDecision}
+              onOutcome={setOutcome}
+            />
           </div>
+          <LiveFeed
+            events={visibleEvents}
+            selectedId={selectedId}
+            onSelect={handleSelect}
+            loading={eventsLoading}
+          />
         </div>
-      </main>
+
+        <AttackSimulator />
+      </div>
     </div>
   );
 }

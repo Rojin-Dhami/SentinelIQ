@@ -46,9 +46,11 @@ class Settings(BaseSettings):
     DEVICE_WEIGHT: float = 0.20
     BEHAVIORAL_WEIGHT: float = 0.15
 
-    # Final blend (rule vs ML; ML stays 0 until model is wired in)
-    RULE_BASE_WEIGHT: float = 1.0
-    ML_WEIGHT: float = 0.0
+    # Final blend (rule vs ML; ML stays muted until artifacts are loaded)
+    RULE_BASE_WEIGHT: float = 0.75
+    ML_WEIGHT: float = 0.25
+    ML_ENABLED: bool = True
+    ML_ARTIFACTS_DIR: str = "../ml_core/notebook/artifacts"
 
     # ── Risk bands ──
     RISK_ALLOW_MAX: float = 0.35
@@ -93,6 +95,10 @@ class Settings(BaseSettings):
     BEHAVIOR_EWMA_ALPHA: float = 0.2
     BEHAVIOR_MIN_LOGINS_FOR_BASELINE: int = 5
     BEHAVIOR_ZSCORE_FLAG: float = 3.0
+
+    # ── Account lockout (temporal) ──
+    LOCK_FAIL_THRESHOLD: int = 5
+    LOCK_DURATIONS_MINUTES: list[int] = [15, 60, 360]  # level 1 → 2 → 3
 
 
 settings = Settings()
