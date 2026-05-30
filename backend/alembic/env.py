@@ -21,7 +21,8 @@ if config.config_file_name is not None:
 from app.core.config import settings
 from app.db.models import Base
 
-config.set_main_option("sqlalchemy.url", str(settings.DATABASE_URL))
+db_url = str(settings.DATABASE_URL).replace("%", "%%")
+config.set_main_option("sqlalchemy.url", db_url)
 target_metadata = Base.metadata
 
 # other values from the config, defined by the needs of env.py,

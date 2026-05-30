@@ -47,6 +47,8 @@ async def _fetch_geo(ip: str = ""):
             # ipinfo's free tier doesn't ship proxy/hosting flags; the
             # DATACENTER_ASNS check downstream still catches cloud ASNs.
             privacy = data.get("privacy") or {}
+            is_vpn = bool(privacy.get("vpn"))
+            is_tor = bool(privacy.get("tor"))
 
             return GeoLocation(
                 ip=data.get("ip", ip),
@@ -55,8 +57,10 @@ async def _fetch_geo(ip: str = ""):
                 city=data.get("city", ""),
                 country=data.get("country", ""),
                 asn=asn,
-                is_proxy=bool(privacy.get("proxy") or privacy.get("vpn") or privacy.get("tor")),
+                is_proxy=bool(privacy.get("proxy") or is_vpn or is_tor),
                 is_hosting=bool(privacy.get("hosting")),
+                is_vpn=is_vpn,
+                is_tor=is_tor,
             )
     except Exception as e:
         logger.error(e)
@@ -81,6 +85,8 @@ def _loc_from_dict(data: dict) -> GeoLocation:
         asn=data.get("asn", "Unknown"),
         is_proxy=bool(data.get("is_proxy", False)),
         is_hosting=bool(data.get("is_hosting", False)),
+        is_vpn=bool(data.get("is_vpn", False)),
+        is_tor=bool(data.get("is_tor", False)),
     )
 
 
@@ -113,6 +119,8 @@ async def _store_location(user_id: int, loc: GeoLocation, redis: Redis):
         "asn": loc.asn,
         "is_proxy": loc.is_proxy,
         "is_hosting": loc.is_hosting,
+        "is_vpn": loc.is_vpn,
+        "is_tor": loc.is_tor,
         "timestamp": time.time(),
     })
     await redis.set(_get_redis_key(user_id), payload, ex=60 * 60 * 24 * 30)

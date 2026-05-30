@@ -60,7 +60,88 @@ def _device_label(device_spec) -> str:
     return ua[:80] if ua else "Unknown device"
 
 
-def _debug_payload(breakdown, device_res, ip, city, country) -> dict:
+def _build_ml_features(
+    *,
+    now: datetime,
+    user: User,
+    vel_res,
+    geo_res,
+    device_res,
+    failed_before_success: int,
+) -> dict:
+    hour_of_day = now.hour
+    if user.last_login_at:
+        hour_deviation = abs(hour_of_day - user.last_login_at.hour)
+    else:
+        hour_deviation = 0.0
+
+    distance_km = geo_res.distance_km
+    hours_since_last_login = None
+    if geo_res.time_elapsed_seconds is not None:
+        hours_since_last_login = round(geo_res.time_elapsed_seconds / 3600.0, 4)
+
+    window_seconds = settings.VELOCITY_WINDOW_SECONDS
+    user_rate_per_hour = (vel_res.user_count / max(window_seconds, 1)) * 3600.0
+    velocity_last_1hr = round(user_rate_per_hour, 4)
+    velocity_last_24hr = round(user_rate_per_hour * 24.0, 4)
+
+    ms_between_attempts = None
+    if velocity_last_1hr > 0:
+        ms_between_attempts = round((3600.0 / velocity_last_1hr) * 1000.0, 2)
+
+    is_new_device = not device_res.is_known_device
+    if device_res.is_trusted_device:
+        device_trust_score = 1.0
+    elif device_res.is_known_device:
+        device_trust_score = 0.5
+    else:
+        device_trust_score = 0.0
+
+    is_known_vpn = False
+    is_tor = False
+    if geo_res.current_location:
+        is_known_vpn = bool(geo_res.current_location.is_vpn)
+        is_tor = bool(geo_res.current_location.is_tor)
+
+    is_datacenter_ip = bool(geo_res.is_datacenter)
+    network_risk = (
+        0.25 * int(is_known_vpn)
+        + 0.25 * int(is_datacenter_ip)
+        + 0.35 * int(is_tor)
+        + 0.15 * (min(velocity_last_24hr, 50.0) / 50.0)
+    )
+    ip_reputation = round(min(max(network_risk, 0.0), 1.0), 4)
+
+    created_at = user.created_at
+    if created_at and created_at.tzinfo is None:
+        created_at = created_at.replace(tzinfo=timezone.utc)
+    if created_at:
+        user_account_age_days = max((now - created_at).days, 0)
+    else:
+        user_account_age_days = None
+
+    return {
+        "timestamp": now.isoformat(),
+        "hour_of_day": hour_of_day,
+        "hour_deviation": round(hour_deviation, 2),
+        "distance_from_last_login_km": distance_km,
+        "hours_since_last_login": hours_since_last_login,
+        "impossible_travel": bool(geo_res.is_impossible_travel),
+        "fail_count_before_success": failed_before_success,
+        "user_account_age_days": user_account_age_days,
+        "velocity_last_1hr": velocity_last_1hr,
+        "velocity_last_24hr": velocity_last_24hr,
+        "ms_between_attempts": ms_between_attempts,
+        "device_trust_score": device_trust_score,
+        "is_new_device": is_new_device,
+        "is_known_vpn": is_known_vpn,
+        "is_datacenter_ip": is_datacenter_ip,
+        "is_tor": is_tor,
+        "ip_reputation": ip_reputation,
+    }
+
+
+def _debug_payload(breakdown, device_res, ip, city, country, ml_features: dict | None) -> dict:
     """DEBUG-mode payload returned in /login responses so tooling (the attack
     simulator, integration tests) can see per-signal scores without scraping
     server logs. Never enable in production."""
@@ -83,6 +164,7 @@ def _debug_payload(breakdown, device_res, ip, city, country) -> dict:
             "is_trusted": device_res.is_trusted_device,
             "headless_score": round(device_res.headless_score, 3),
         },
+        "ml_features": ml_features,
     }
 
 
@@ -267,6 +349,7 @@ async def login_flow(
         raise HTTPException(status_code=401, detail=bad_detail)
 
     # ── Password OK — run the full pipeline ─────────────────────────────────
+    failed_before_success = user.failed_login_count or 0
     user.failed_login_count = 0
 
     # Bot signals after correct password still matter: a bot that bought creds
@@ -295,7 +378,18 @@ async def login_flow(
         user.email, breakdown.decision.value, breakdown.final,
         {"v": breakdown.velocity, "g": breakdown.geo, "d": breakdown.device, "b": breakdown.behavioral},
     )
-    debug_payload = _debug_payload(breakdown, device_res, ip, city, country) if settings.DEBUG else None
+    ml_features = _build_ml_features(
+        now=datetime.now(timezone.utc),
+        user=user,
+        vel_res=vel_res,
+        geo_res=geo_res,
+        device_res=device_res,
+        failed_before_success=failed_before_success,
+    )
+    debug_payload = (
+        _debug_payload(breakdown, device_res, ip, city, country, ml_features)
+        if settings.DEBUG else None
+    )
     # ── BLOCK ──────────────────────────────────────────────────────────────
     if breakdown.decision is RiskDecision.BLOCK:
         event = LoginEvent(

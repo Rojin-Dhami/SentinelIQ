@@ -53,6 +53,7 @@ class User(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, server_default="false")
     is_verified: Mapped[bool] = mapped_column(Boolean, server_default="false")
     role: Mapped[UserRole] = mapped_column(Enum(UserRole), server_default="user")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     failed_login_count: Mapped[int] = mapped_column(Integer, server_default="0")
 

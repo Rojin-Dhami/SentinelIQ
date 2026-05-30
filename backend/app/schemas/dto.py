@@ -22,6 +22,8 @@ class GeoLocation:
     asn: str
     is_proxy: bool = False
     is_hosting: bool = False
+    is_vpn: bool = False
+    is_tor: bool = False
 
 
 @dataclass
