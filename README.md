@@ -239,29 +239,6 @@ jupyter notebook
 > **Note:** `frontend/package.json` and Vite configuration are pending. Setup instructions will be added when the frontend build configuration is complete.
 
 ---
-
-## Development Status
-
-| Component | Status | Notes |
-|-----------|--------|-------|
-| Backend Framework (FastAPI) | ✅ Complete | App factory, middleware, lifespan |
-| Database Models (SQLAlchemy) | ✅ Complete | All 4 tables defined |
-| Alembic Migrations | 🔄 In Progress | Scripts not yet generated |
-| Auth Endpoints (`/login`, `/register`) | 🔄 In Progress | Routes defined; service logic scaffolded |
-| Velocity Detection | ✅ Complete | Redis sorted-set sliding window |
-| Geo-IP / Impossible Travel | ✅ Complete | Haversine + ip-api.com |
-| Device Fingerprinting | 🔄 In Progress | Schema complete; async fix needed |
-| Behavioral Biometrics | ✅ Complete | Rule-based scoring complete |
-| Risk Aggregation | ✅ Complete | Weighted engine with ML hook |
-| Email / Alerts (Brevo) | ✅ Complete | `send_email()` service implemented |
-| ML Model (Isolation Forest) | 🔲 Scaffolded | Dependencies defined; training TBD |
-| RBA Dataset Integration | 🔲 Planned | EDA and feature alignment in progress |
-| Frontend (TypeScript/CSS) | 🔄 In Progress | Fingerprinting client schemas defined |
-| MFA / TOTP Service | 🔲 Planned | Enum defined; no OTP service yet |
-| Admin / Monitoring Endpoints | 🔲 Planned | Not yet built |
-
----
-
 ## Known Issues & Next Steps
 
 - **ML Core activation** — Training pipeline on the RBA dataset must be built before the `RULE_BASE_WEIGHT / ML_WEIGHT` blend in `aggregate.py` is functional
