@@ -82,10 +82,10 @@ Digital financial platforms face a relentless stream of automated attacks at the
 
 | Signal | Weight | Method |
 |--------|--------|--------|
-| Velocity Check | 0.40 | Redis sorted-set sliding window (per-user + per-IP) |
+| Velocity Check | 0.30 | Redis sorted-set sliding window (per-user + per-IP) |
 | Geo / Impossible Travel | 0.35 | Haversine distance + speed check via ip-api.com |
-| Device Fingerprinting | 0.15 | Device trust registry + headless/bot scoring |
-| Behavioral Biometrics | 0.10 | Keystroke dynamics, mouse linearity, form-fill timing |
+| Device Fingerprinting | 0.20 | Device trust registry + headless/bot scoring |
+| Behavioral Biometrics | 0.15 | Keystroke dynamics, mouse linearity, form-fill timing |
 
 ```
 final_risk = (rule_based_risk × RULE_BASE_WEIGHT) + (ml_risk × ML_WEIGHT)
