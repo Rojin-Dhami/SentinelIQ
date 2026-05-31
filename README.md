@@ -26,7 +26,7 @@ Digital financial platforms face a relentless stream of automated attacks at the
 - **Geo-IP / Impossible Travel** — Haversine-distance detection of physically impossible logins
 - **Device Fingerprinting** — headless browser / bot detection and device trust registry
 - **Behavioral Biometrics** — keystroke dynamics, mouse linearity, and form-interaction signals
-- **ML Anomaly Detection** *(in development)* — Isolation Forest trained on the RBA dataset for complex pattern detection invisible to rule-based systems
+- **ML Anomaly Detection** — Isolation Forest trained on the RBA dataset for complex pattern detection invisible to rule-based systems
 
 ---
 
@@ -38,8 +38,8 @@ Digital financial platforms face a relentless stream of automated attacks at the
 └────────────────────────┬────────────────────────────────┘
                          │
          ┌───────────────▼───────────────┐
-         │       FastAPI Backend          │
-         │   /auth/login · /auth/register │
+         │       FastAPI Backend         │
+         │   /auth/login · /auth/register│
          └───────────────┬───────────────┘
                          │
     ┌────────────────────▼────────────────────┐
@@ -108,11 +108,11 @@ Risk score gates login outcomes: `success` → `mfa_required` → `blocked_risk`
 ### ML Core
 - **Isolation Forest** (scikit-learn) — unsupervised anomaly detection
 - **SHAP** — TreeExplainer for per-prediction feature attribution
-- **RBA Dataset** — baseline training corpus (Doowon Kim et al., "You Are Who You Appear to Be")
+- **Synthetic Dataset** — Dataset in which model is trained 
 - Pandas, NumPy, Matplotlib, Seaborn, Jupyter
 
 ### Frontend
-- TypeScript + CSS (Vite + React SPA)
+- TypeScript + CSS (Vite + Next.js SPA)
 - Collects: hardware fingerprint, canvas hash, WebGL renderer, keystroke dynamics, mouse events, webRTC local IP, and 20+ behavioral signals per login attempt
 
 ---
@@ -178,11 +178,11 @@ All parameters are tunable via environment variables (`.env` / Pydantic-Settings
 | `VELOCITY_WINDOW_SECONDS` | `60` | Sliding window length for velocity checks |
 | `USER_MAX_ATTEMPTS` | `5` | Max attempts per user before high risk score |
 | `IP_MAX_ATTEMPTS` | `20` | Max attempts per IP before high risk score |
-| `VELOCITY_WEIGHT` | `0.40` | Velocity signal weight in aggregate score |
+| `VELOCITY_WEIGHT` | `0.30` | Velocity signal weight in aggregate score |
 | `GEO_MAX_SPEED_KMH` | `900` | Max plausible travel speed (km/h) |
 | `GEO_WEIGHT` | `0.35` | Geo signal weight in aggregate score |
-| `DEVICE_WEIGHT` | `0.15` | Device fingerprint signal weight |
-| `BEHAVIORAL_WEIGHT` | `0.10` | Behavioral biometrics signal weight |
+| `DEVICE_WEIGHT` | `0.20` | Device fingerprint signal weight |
+| `BEHAVIORAL_WEIGHT` | `0.15` | Behavioral biometrics signal weight |
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | `30` | JWT access token TTL |
 | `REFRESH_TOKEN_EXPIRE_MINUTES` | `1440` | JWT refresh token TTL (24 hours) |
 | `BREVO_API_KEY` | — | Brevo transactional email API key |
