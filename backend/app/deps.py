@@ -19,8 +19,8 @@ def get_redis_client() -> Redis:
         _redis_client = Redis(
             host=settings.REDIS_HOST,
             port=settings.REDIS_PORT,
-            password=settings.REDIS_PASSWORD,
-            ssl=True,
+            password=settings.REDIS_PASSWORD or None,
+            ssl=settings.REDIS_USE_SSL,
             decode_responses=True,
         )
     return _redis_client

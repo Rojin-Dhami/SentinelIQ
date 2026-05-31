@@ -18,6 +18,7 @@ export interface AdminEvent {
   created_at: string | null;
   user_id: number | null;
   user_email: string | null;
+  user_uuid: string | null;
   ip: string | null;
   city: string | null;
   country: string | null;
@@ -50,4 +51,17 @@ export interface AdminUser {
   full_name: string | null;
   role: string;
   is_verified: boolean;
+}
+
+export interface ScenarioMeta {
+  key: string;
+  label: string;
+  icon: string;
+  description: string;
+  expected: string[];
+  tier: string;
+}
+
+export interface ScenariosResponse {
+  scenarios: ScenarioMeta[];
 }

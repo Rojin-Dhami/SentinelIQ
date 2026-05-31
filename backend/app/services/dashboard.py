@@ -24,6 +24,7 @@ def event_payload(
     event: LoginEvent,
     *,
     user_email: str | None = None,
+    user_uuid: str | None = None,
     extra: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Shape a LoginEvent row into the JSON payload the dashboard consumes."""
@@ -32,6 +33,7 @@ def event_payload(
         "created_at": event.created_at.isoformat() if event.created_at else None,
         "user_id": event.user_id,
         "user_email": user_email,
+        "user_uuid": user_uuid,
         "ip": event.ip_address,
         "city": event.city,
         "country": event.country,

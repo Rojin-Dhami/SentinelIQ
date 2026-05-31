@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     REDIS_HOST: str
     REDIS_PORT: int
     REDIS_PASSWORD: str
+    REDIS_USE_SSL: bool = False # False for local else True
 
     # ── Email (Brevo) ──
     BREVO_API_KEY: str

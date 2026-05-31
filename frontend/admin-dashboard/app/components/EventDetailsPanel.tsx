@@ -68,7 +68,11 @@ export default function EventDetailsPanel({ eventId, onClose }: Props) {
     setActionMsg(null);
     getEvent(eventId)
       .then((e) => {
-        if (!cancelled) setEv(e);
+        if (!cancelled) {
+          setEv(e);
+          // Auto-populate UUID if available so admin doesn't need to type it
+          if (e.user_uuid) setUserUuid(e.user_uuid);
+        }
       })
       .catch((e) => {
         if (cancelled) return;
@@ -343,17 +347,17 @@ export default function EventDetailsPanel({ eventId, onClose }: Props) {
           )}
           <input
             type="text"
-            placeholder="user UUID (required for unlock / revoke-all)"
+            placeholder="user UUID (auto-filled from event)"
             value={userUuid}
             onChange={(e) => setUserUuid(e.target.value.trim())}
             style={{
               background: "#0a1a2e",
-              border: `1px solid ${C.borderSub}`,
+              border: `1px solid ${userUuid ? C.teal : C.borderSub}`,
               borderRadius: 6,
               padding: "7px 10px",
               fontSize: 11,
               fontFamily: "monospace",
-              color: C.textWhite,
+              color: userUuid ? C.teal : C.textMuted,
               outline: "none",
             }}
           />

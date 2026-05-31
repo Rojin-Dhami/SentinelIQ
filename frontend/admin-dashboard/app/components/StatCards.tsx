@@ -69,7 +69,14 @@ function StatCard({
 export default function StatCards({ stats }: { stats: StatsResponse | null }) {
   const total = stats?.total ?? 0;
   const flagged = sum(stats?.by_decision, ["step_up", "mfa", "mfa_required"]);
-  const blocked = sum(stats?.by_decision, ["block", "blocked", "lock"]);
+  const blocked = sum(stats?.by_decision, [
+    "block",
+    "blocked",
+    "hard_block",
+    "lock",
+    "locked",
+    "rate_limited",
+  ]);
   const successes = sum(stats?.by_outcome, ["success", "mfa_verified"]);
   const successPct = total > 0 ? ((successes / total) * 100).toFixed(1) : "0.0";
 

@@ -346,6 +346,162 @@ def scenario_combined(base_url: str, email: str, password: str) -> None:
     print_outcome("combined attack", out)
 
 
+def scenario_password_spray(base_url: str, email: str, password: str) -> None:
+    print("\n=== password_spray: one IP tries common passwords against 8 different accounts ===")
+    print("Expected: per-IP velocity rises; per-user velocity stays low for each victim.")
+    ip = IP_AWS   # datacenter IP makes it more suspicious
+    # Real user + 7 synthetic accounts (will 404 gracefully)
+    targets = [email] + [f"victim{i}@corp.example" for i in range(1, 8)]
+    common_passwords = ["Password1!", "Winter2025!", "Company123!", "Welcome1@", "Summer2024!"]
+    for target in targets:
+        pw = random.choice(common_passwords)
+        payload = build_payload(target, pw, behavior=bot_behavior())
+        out = post_login(base_url, payload, ip)
+        print_outcome(f"spray → {target[:24]}", out)
+        time.sleep(0.2)
+
+
+def scenario_account_takeover(base_url: str, email: str, password: str) -> None:
+    print("\n=== account_takeover: correct creds + new device + foreign IP + bot behavior ===")
+    print("Expected: device + geo + behavioral signals fire simultaneously → BLOCK or STEP_UP.")
+
+    # First: establish a baseline login from home country
+    out1 = post_login(base_url, build_payload(email, password, device=human_device("ato-base")), IP_NP)
+    print_outcome("baseline login (NP)", out1)
+    if out1.status_code >= 400:
+        print("  ! baseline login failed — verify credentials.")
+        return
+    time.sleep(2)
+
+    # ATO attempt 1: completely new device + AU IP + bot signals
+    ato1 = build_payload(
+        email, password,
+        device=new_device("ato-1"),
+        behavior=bot_behavior(),
+        session=session_meta(webdriver=True, headless=True),
+    )
+    out2 = post_login(base_url, ato1, IP_AU)
+    print_outcome("ATO #1 (AU + new device + bot)", out2)
+    time.sleep(1)
+
+    # ATO attempt 2: different new device from DE datacenter
+    ato2 = build_payload(
+        email, password,
+        device=new_device("ato-2"),
+        behavior=bot_behavior(),
+        session=session_meta(webdriver=True, headless=True),
+    )
+    out3 = post_login(base_url, ato2, IP_DE)
+    print_outcome("ATO #2 (DE + different device + bot)", out3)
+    time.sleep(0.5)
+
+    # ATO attempt 3: AWS IP + pasted credentials
+    ato3 = build_payload(
+        email, password,
+        device=new_device("ato-3"),
+        behavior=bot_behavior(),
+        session=session_meta(webdriver=False, headless=False),
+    )
+    out4 = post_login(base_url, ato3, IP_AWS)
+    print_outcome("ATO #3 (AWS + pasted creds)", out4)
+
+
+# ─── scenario metadata (consumed by the admin /scenarios endpoint) ────────────
+
+SCENARIO_META: dict[str, dict] = {
+    "brute_force": {
+        "label": "Brute Force",
+        "icon": "🔨",
+        "description": (
+            "15 wrong-password attempts from one Nepal IP, then a correct-credential probe. "
+            "Exercises per-(user,ip) velocity counter and triggers progressive account lockout."
+        ),
+        "expected": ["velocity ↑", "rate_limit", "lock after threshold"],
+        "tier": "Tier 3",
+    },
+    "distributed_brute": {
+        "label": "Distributed Brute",
+        "icon": "🌐",
+        "description": (
+            "20 failed attempts across 20 rotating IPs (TEST-NET-3) targeting the same user. "
+            "Per-IP velocity stays low, but per-user velocity spikes — harder to block with simple IP rules."
+        ),
+        "expected": ["user_velocity ↑", "ip spread"],
+        "tier": "Tier 3",
+    },
+    "impossible_travel": {
+        "label": "Impossible Travel",
+        "icon": "✈️",
+        "description": (
+            "Login from US (Google DNS / 8.8.8.8), then 5 seconds later from AU (Cloudflare / 1.1.1.1). "
+            "9,200 km apart in 5 s — physically impossible. Geo time-risk fires."
+        ),
+        "expected": ["geo_time_risk ↑", "impossible_travel flag"],
+        "tier": "Tier 4",
+    },
+    "new_device": {
+        "label": "New Device",
+        "icon": "💻",
+        "description": (
+            "Correct credentials submitted from a randomized browser fingerprint (canvas, WebGL, UA, platform) "
+            "that has never been seen for this user. Triggers device novelty → step-up MFA."
+        ),
+        "expected": ["device novelty ↑", "step_up"],
+        "tier": "Tier 2",
+    },
+    "bot_behavior": {
+        "label": "Bot Behavior",
+        "icon": "🤖",
+        "description": (
+            "Correct credentials with bot-like behavioral signals: instant form fill (<250 ms), "
+            "zero keystroke variance, no mouse movement, pasted username + password, headless browser markers."
+        ),
+        "expected": ["behavioral ↑", "headless flag", "webdriver"],
+        "tier": "Tier 2–3",
+    },
+    "datacenter_ip": {
+        "label": "Datacenter IP",
+        "icon": "🏢",
+        "description": (
+            "Login from AWS (52.95.110.1), Cloudflare (104.16.50.1), and Hetzner (144.76.10.1). "
+            "Known-datacenter ASNs are unusual for human end-users → geo/ASN risk bump."
+        ),
+        "expected": ["geo ASN risk ↑", "vpn/datacenter flag"],
+        "tier": "Tier 2",
+    },
+    "combined": {
+        "label": "Combined Attack",
+        "icon": "⚡",
+        "description": (
+            "New device + AWS datacenter IP + bot typing + webdriver + headless browser, all at once. "
+            "Stacks velocity, geo, device, and behavioral signals for maximum combined risk score."
+        ),
+        "expected": ["velocity + geo + device + behavioral", "BLOCK"],
+        "tier": "Tier 4",
+    },
+    "password_spray": {
+        "label": "Password Spray",
+        "icon": "💦",
+        "description": (
+            "One AWS datacenter IP tries 5 common passwords against 8 different user accounts. "
+            "Per-user velocity stays low (evades per-account lockout) but per-IP velocity spikes."
+        ),
+        "expected": ["ip_velocity ↑", "multi-account spread", "datacenter ASN"],
+        "tier": "Tier 3",
+    },
+    "account_takeover": {
+        "label": "Account Takeover",
+        "icon": "🎯",
+        "description": (
+            "Correct credentials (post-breach) used from 3 different new devices across AU, DE, and AWS IPs "
+            "with bot-like behavior. Classic post-credential-theft ATO pattern — highest combined risk."
+        ),
+        "expected": ["device ↑", "geo ↑", "behavioral ↑", "impossible travel"],
+        "tier": "Tier 4",
+    },
+}
+
+
 SCENARIOS = {
     "brute_force": scenario_brute_force,
     "distributed_brute": scenario_distributed_brute,
@@ -354,6 +510,8 @@ SCENARIOS = {
     "bot_behavior": scenario_bot_behavior,
     "datacenter_ip": scenario_datacenter_ip,
     "combined": scenario_combined,
+    "password_spray": scenario_password_spray,
+    "account_takeover": scenario_account_takeover,
 }
 
 
@@ -362,7 +520,7 @@ SCENARIOS = {
 def main() -> int:
     parser = argparse.ArgumentParser(description="SentinelIQ rule-based engine simulator")
     parser.add_argument("scenario", choices=[*SCENARIOS, "all"],
-                        help="which scenario to run")
+                        help="which scenario to run")    
     parser.add_argument("--email", required=True, help="verified test user email")
     parser.add_argument("--password", required=True, help="correct password for that user")
     parser.add_argument("--base-url", default=DEFAULT_BASE_URL,

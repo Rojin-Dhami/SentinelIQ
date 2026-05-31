@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session as DbSession
 from app.deps import get_db, get_redis, require_admin
 from app.db.models import LoginEvent, Session as SessionModel, User
 from app.services import dashboard, sessions as session_svc
-from scripts.attack_simulator import SCENARIOS as ATTACK_SCENARIOS
+from scripts.attack_simulator import SCENARIOS as ATTACK_SCENARIOS, SCENARIO_META
 
 logger = logging.getLogger(__name__)
 
@@ -86,8 +86,8 @@ _WINDOWS = {
 }
 
 
-def _row_to_payload(event: LoginEvent, user_email: str | None) -> dict:
-    return dashboard.event_payload(event, user_email=user_email)
+def _row_to_payload(event: LoginEvent, user_email: str | None, user_uuid: str | None = None) -> dict:
+    return dashboard.event_payload(event, user_email=user_email, user_uuid=user_uuid)
 
 
 @router.get("/stats")
@@ -155,7 +155,7 @@ def list_events(
       reconnect; returns events strictly newer than `since_id` in ascending
       order.
     """
-    stmt = select(LoginEvent, User.email).join(
+    stmt = select(LoginEvent, User.email, User.uuid).join(
         User, User.id == LoginEvent.user_id, isouter=True
     )
     if before_id is not None:
@@ -173,7 +173,7 @@ def list_events(
     stmt = stmt.order_by(order).limit(limit)
 
     rows = db.execute(stmt).all()
-    items = [_row_to_payload(ev, email) for ev, email in rows]
+    items = [_row_to_payload(ev, email, str(uuid) if uuid else None) for ev, email, uuid in rows]
     next_before_id = items[-1]["id"] if (since_id is None and items) else None
 
     return {
@@ -190,14 +190,14 @@ def get_event(
     db: DbSession = Depends(get_db),
 ) -> dict:
     row = db.execute(
-        select(LoginEvent, User.email)
+        select(LoginEvent, User.email, User.uuid)
         .join(User, User.id == LoginEvent.user_id, isouter=True)
         .where(LoginEvent.id == event_id)
     ).one_or_none()
     if row is None:
         raise HTTPException(status_code=404, detail="event not found")
-    ev, email = row
-    return _row_to_payload(ev, email)
+    ev, email, uuid = row
+    return _row_to_payload(ev, email, str(uuid) if uuid else None)
 
 
 @router.post("/users/{user_uuid}/unlock")
@@ -260,6 +260,23 @@ def revoke_all_user_sessions(
     count = session_svc.revoke_all_user_sessions(db, user.id)
     db.commit()
     return {"uuid": str(user.uuid), "revoked_count": count}
+
+
+@router.get("/scenarios")
+def list_scenarios(_admin: User = Depends(require_admin)) -> dict:
+    """Return available attack scenarios with metadata for the demo UI."""
+    scenarios = []
+    for key in ATTACK_SCENARIOS:
+        meta = SCENARIO_META.get(key, {})
+        scenarios.append({
+            "key": key,
+            "label": meta.get("label", key),
+            "icon": meta.get("icon", "⚡"),
+            "description": meta.get("description", ""),
+            "expected": meta.get("expected", []),
+            "tier": meta.get("tier", "—"),
+        })
+    return {"scenarios": scenarios}
 
 
 @router.post("/simulate/{scenario}")

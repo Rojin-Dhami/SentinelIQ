@@ -139,3 +139,7 @@ export function simulateAttack(
     body: JSON.stringify({ email, password }),
   });
 }
+
+export function getScenarios(): Promise<import("./types").ScenariosResponse> {
+  return request<import("./types").ScenariosResponse>("/admin/scenarios");
+}

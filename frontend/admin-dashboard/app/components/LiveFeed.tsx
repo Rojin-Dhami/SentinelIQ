@@ -1,6 +1,6 @@
 "use client";
 
-import { C, decisionBorder, decisionColor } from "../lib/theme";
+import { C, decisionBorder, decisionColor, outcomeColor } from "../lib/theme";
 import type { AdminEvent } from "../lib/types";
 
 function fmtTime(iso: string | null): string {
@@ -47,6 +47,7 @@ interface Props {
   selectedId: number | null;
   onSelect: (ev: AdminEvent) => void;
   loading: boolean;
+  recentIds?: Set<number>;
 }
 
 export default function LiveFeed({
@@ -54,6 +55,7 @@ export default function LiveFeed({
   selectedId,
   onSelect,
   loading,
+  recentIds,
 }: Props) {
   return (
     <div
@@ -104,8 +106,32 @@ export default function LiveFeed({
             )}
             {events.map((ev) => {
               const isSelected = selectedId === ev.id;
+              const isRecent = recentIds?.has(ev.id) ?? false;
               const borderColor = decisionBorder(ev.decision);
               const actionColor = decisionColor(ev.decision);
+
+              // Pick flash animation by decision severity
+              let flashAnim = "none";
+              if (isRecent) {
+                if (
+                  ev.decision === "block" ||
+                  ev.decision === "hard_block" ||
+                  ev.decision === "locked" ||
+                  ev.decision === "lock" ||
+                  ev.decision === "rate_limited"
+                ) {
+                  flashAnim = "rowFlashRed 1.8s ease forwards";
+                } else if (
+                  ev.decision === "step_up" ||
+                  ev.decision === "mfa" ||
+                  ev.decision === "mfa_required"
+                ) {
+                  flashAnim = "rowFlashOrange 1.8s ease forwards";
+                } else {
+                  flashAnim = "rowFlash 1.8s ease forwards";
+                }
+              }
+
               return (
                 <tr
                   key={ev.id}
@@ -116,10 +142,30 @@ export default function LiveFeed({
                       ? "rgba(45,212,191,0.06)"
                       : "transparent",
                     cursor: "pointer",
-                    transition: "background 0.12s",
+                    transition: isRecent ? "none" : "background 0.12s",
+                    animation: isSelected ? "none" : flashAnim,
                   }}
                 >
-                  <Td>{fmtTime(ev.created_at)}</Td>
+                  <Td>
+                    {fmtTime(ev.created_at)}
+                    {isRecent && (
+                      <span
+                        style={{
+                          marginLeft: 5,
+                          fontSize: 8,
+                          fontFamily: "monospace",
+                          color: "#081624",
+                          background: C.teal,
+                          borderRadius: 2,
+                          padding: "1px 4px",
+                          letterSpacing: "0.08em",
+                          verticalAlign: "middle",
+                        }}
+                      >
+                        NEW
+                      </span>
+                    )}
+                  </Td>
                   <Td white>{ev.user_email ?? `user#${ev.user_id ?? "?"}`}</Td>
                   <Td>{ev.ip ?? "—"}</Td>
                   <Td>{fmtLoc(ev)}</Td>
@@ -130,7 +176,7 @@ export default function LiveFeed({
                   <Td color={actionColor} bold>
                     {(ev.decision ?? "—").toUpperCase()}
                   </Td>
-                  <Td>{ev.outcome ?? "—"}</Td>
+                  <Td color={outcomeColor(ev.outcome)}>{ev.outcome ?? "—"}</Td>
                   <Td>
                     <span style={{ color: C.textMuted, fontSize: 16 }}>›</span>
                   </Td>

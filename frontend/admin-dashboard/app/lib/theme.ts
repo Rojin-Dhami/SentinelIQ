@@ -24,7 +24,10 @@ export const DECISION_COLOR: Record<string, string> = {
   mfa_required: C.yellow,
   block: C.red,
   blocked: C.red,
-  lock: C.orange,
+  hard_block: C.red,
+  lock: C.red,
+  locked: C.red,
+  rate_limited: C.red,
 };
 
 export const DECISION_BORDER: Record<string, string> = {
@@ -34,8 +37,28 @@ export const DECISION_BORDER: Record<string, string> = {
   mfa_required: "#ca8a04",
   block: C.red,
   blocked: C.red,
-  lock: C.orange,
+  hard_block: C.red,
+  lock: C.red,
+  locked: C.red,
+  rate_limited: C.red,
 };
+
+export const OUTCOME_COLOR: Record<string, string> = {
+  success: C.green,
+  mfa_verified: C.green,
+  failed: C.red,
+  failure: C.red,
+  blocked: C.red,
+  locked: C.red,
+  rate_limited: C.red,
+  mfa_required: C.yellow,
+  step_up: C.yellow,
+};
+
+export function outcomeColor(outcome: string | null | undefined): string {
+  if (!outcome) return C.textMuted;
+  return OUTCOME_COLOR[outcome] ?? C.textMuted;
+}
 
 export function decisionColor(decision: string | null | undefined): string {
   if (!decision) return C.textMuted;
